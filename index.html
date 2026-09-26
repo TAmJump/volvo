@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>XC90 Volvo API Checker</title>
+<style>body{font-family:-apple-system,sans-serif;background:#0b0d10;color:#fff;margin:0}main{max-width:760px;margin:auto;padding:24px}.card{background:#171b21;padding:18px;border-radius:16px;margin:14px 0}input,button{box-sizing:border-box;width:100%;padding:13px;margin:7px 0;border-radius:10px;border:1px solid #444}input{background:#0d1116;color:#fff}button{font-weight:700}pre{white-space:pre-wrap;word-break:break-word;background:#090b0e;padding:14px;border-radius:10px}.small{font-size:12px;color:#aaa}</style></head>
+<body><main><h1>XC90 Volvo API Checker</h1><p>VIN: <b>YV1LFH6M4R1154216</b></p>
+<div class="card"><label>VCC API Key</label><input id="key" type="password"><label>Access Token</label><input id="token" type="password">
+<button onclick="access()">1. APIアクセス確認</button><button onclick="locationTest()">2. Location API確認</button>
+<p class="small">認証情報は保存しません。</p></div>
+<div class="card"><b>結果</b><pre id="out">待機中</pre></div>
+<div class="card"><b>位置情報</b><div id="loc">未取得</div></div>
+<script>
+const VIN="YV1LFH6M4R1154216",out=document.getElementById("out");
+function h(){let k=key.value.trim(),t=token.value.trim();if(!k||!t)throw Error("API KeyとAccess Tokenを入力してください");return {"accept":"application/json","authorization":"Bearer "+t,"vcc-api-key":k}}
+async function req(u){out.textContent="通信中…";let r=await fetch(u,{headers:h()}),s=await r.text(),d;try{d=JSON.parse(s)}catch{d=s}out.textContent="HTTP "+r.status+"\n\n"+(typeof d==="string"?d:JSON.stringify(d,null,2));return {r,d}}
+async function access(){try{await req(`https://api.volvocars.com/connected-vehicle/v2/vehicles/${VIN}/command-accessibility`)}catch(e){out.textContent="ERROR\n"+e.message}}
+function coords(o){let f=null;function w(x){if(f||!x||typeof x!=="object")return;let a=x.latitude??x.lat,b=x.longitude??x.lng??x.lon;if(isFinite(Number(a))&&isFinite(Number(b))){f={a:Number(a),b:Number(b)};return}Object.values(x).forEach(w)}w(o);return f}
+async function locationTest(){try{let urls=[`https://api.volvocars.com/location/v1/vehicles/${VIN}/location`,`https://api.volvocars.com/location/v1/vehicles/${VIN}`],z;for(let u of urls){z=await req(u);if(z.r.ok)break}let p=coords(z.d);loc.innerHTML=p?`座標: <b>${p.a}, ${p.b}</b><br><a target="_blank" href="https://www.google.com/maps?q=${p.a},${p.b}">Google Mapsで開く</a>`:"座標取得なし。上のHTTP応答を確認。"}catch(e){out.textContent="ERROR\n"+e.message}}
+</script></main></body></html>
