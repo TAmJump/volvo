@@ -1,0 +1,14 @@
+services:
+  app:
+    image: node:22-alpine
+    working_dir: /app
+    volumes: [".:/app"]
+    command: sh -c "npm install && npm start"
+    env_file: .env
+    ports: ["8080:8080"]
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: trace
+      POSTGRES_USER: trace
+      POSTGRES_PASSWORD: change_me

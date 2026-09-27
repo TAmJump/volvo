@@ -1,0 +1,1 @@
+{"name":"trace-vehicle","version":"2.0.0","type":"module","scripts":{"start":"node src/server.js"},"dependencies":{"dotenv":"latest","express":"latest","helmet":"latest"}}

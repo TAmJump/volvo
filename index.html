@@ -1,23 +1,781 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>XC90 Control Center</title><style>
-*{box-sizing:border-box}body{margin:0;background:#f5f5f7;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.w{max-width:1100px;margin:auto;padding:34px 18px}.head{display:flex;justify-content:space-between;align-items:end;margin-bottom:22px}h1{margin:0;font-size:38px;letter-spacing:-1.5px}.muted{color:#6e6e73}.tag{background:#111;color:#fff;border-radius:30px;padding:8px 12px;font-size:12px}.g{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}.c{background:#fff;border:1px solid #ddd;border-radius:22px;padding:21px}.a{grid-column:span 5}.b{grid-column:span 7}.full{grid-column:span 12}h2{margin:0 0 14px;font-size:18px}.row{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding:11px 0}.ok{color:#188038}.bad{color:#c5221f}.wait{color:#9a6700}label{display:block;font-size:12px;color:#6e6e73;margin:10px 0 5px}input,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radius:12px;background:#fafafa}textarea{height:82px}button{border:0;border-radius:30px;background:#111;color:#fff;padding:12px 17px;margin:10px 6px 0 0;font-weight:650}.alt{background:#eee;color:#111}.log{background:#0b0b0c;color:#eee;border-radius:14px;padding:15px;min-height:150px;white-space:pre-wrap;overflow:auto;font:12px ui-monospace,monospace}.map{height:220px;background:#f0f0f2;border-radius:15px;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px}.small{font-size:12px;line-height:1.55;color:#6e6e73}@media(max-width:700px){.a,.b,.full{grid-column:span 12}.head{display:block}.tag{display:inline-block;margin-top:12px}h1{font-size:30px}}
-</style></head><body><div class="w"><div class="head"><div><h1>XC90 Control Center</h1><div class="muted">Volvo API Diagnostic Console</div></div><div class="tag">YV1LFH6M4R1154216</div></div><div class="g">
-<div class="c a"><h2>Connection</h2><div class="row"><span>API</span><b id="api" class="wait">● 未診断</b></div><div class="row"><span>Token</span><b id="tok" class="wait">● 未診断</b></div><div class="row"><span>Vehicle relationship</span><b id="rel" class="wait">● 未診断</b></div><div class="row"><span>VIN</span><b id="vin" class="wait">● 未診断</b></div><div class="row"><span>Location</span><b id="locs" class="wait">● 未診断</b></div></div>
-<div class="c b"><h2>Credentials</h2><label>VCC API KEY</label><input id="key" type="password"><label>CONNECTED VEHICLE TOKEN</label><textarea id="cv"></textarea><label>LOCATION TOKEN</label><textarea id="lt"></textarea><button onclick="run()">全診断</button><button class="alt" onclick="save()">端末に保存</button><button class="alt" onclick="clearx()">消去</button><p class="small">秘密情報はHTMLに埋め込みません。保存した場合のみ、このブラウザ内に保持します。</p></div>
-<div class="c full"><h2>Location</h2><div class="map" id="map">relationship確認後、Location APIの結果を表示します。</div><button class="alt" id="maps" style="display:none" onclick="gomap()">Google Mapsで開く</button></div>
-<div class="c full"><h2>API Log</h2><div class="log" id="log">READY — 「全診断」を押してください。</div><button class="alt" onclick="dl()">ログ保存</button></div>
-<div class="c full"><h2>診断結果</h2><div id="advice" class="small">未診断です。</div></div>
-</div></div><script>
-const VIN="YV1LFH6M4R1154216";let logs=[],coords=null;const q=x=>document.getElementById(x);
-function line(x){logs.push("["+new Date().toLocaleTimeString("ja-JP")+"] "+x);q("log").textContent=logs.join("\n")}
-function st(id,t,c){q(id).textContent="● "+t;q(id).className=c}
-function jwt(t){try{return JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")))}catch(e){return null}}
-async function call(url,t,k){let r=await fetch(url,{headers:{accept:"application/json",authorization:"Bearer "+t,"vcc-api-key":k}}),x=await r.text(),d;try{d=JSON.parse(x)}catch{d=x}line(r.status+" "+url+"\n"+(typeof d==="string"?d:JSON.stringify(d,null,2)));return {s:r.status,d}}
-async function run(){logs=[];coords=null;q("maps").style.display="none";let k=q("key").value.trim(),cv=q("cv").value.trim(),lt=q("lt").value.trim();if(!k){st("api","KEY未入力","bad");return}let p=jwt(cv);if(!p)st("tok","TOKEN不正","bad");else if(p.exp*1000<Date.now())st("tok","期限切れ","bad");else st("tok","VALID","ok");
-try{let v=await call("https://api.volvocars.com/connected-vehicle/v2/vehicles",cv,k);if(v.s===200){st("api","REACHABLE","ok");let a=v.d?.data||[];if(!a.length){st("rel","NOT LINKED","bad");st("vin","NO VEHICLE","bad");q("advice").innerHTML="<b>Volvo ID ↔ 車両relationshipなし。</b><br>APIには到達していますが車両一覧は0台です。Volvo側でVINとの紐付け後に再診断してください。"}else{st("rel","LINKED","ok");let f=JSON.stringify(a).includes(VIN);st("vin",f?"MATCH":"OTHER VIN",f?"ok":"bad")}}else st("api","HTTP "+v.s,"bad")}catch(e){st("api","BROWSER BLOCKED","bad");line("Connected Vehicle: "+e.message);q("advice").innerHTML="<b>ブラウザ通信がCORS等で遮断されています。</b><br>これはVolvo IDの認証失敗とは別です。PowerShellまたはサーバー側中継が必要です。"}
-if(lt){try{let l=await call("https://api.volvocars.com/location/v1/vehicles/"+VIN+"/location",lt,k);if(l.s===200){st("locs","AVAILABLE","ok");let c=l.d?.data?.geometry?.coordinates||l.d?.geometry?.coordinates;if(c){coords=[c[1],c[0]];q("map").innerHTML="<div><b style='font-size:26px'>"+coords[0].toFixed(6)+", "+coords[1].toFixed(6)+"</b><br><span class='muted'>Location API</span></div>";q("maps").style.display="inline-block"}}else st("locs",l.s===403?"403 FORBIDDEN":"HTTP "+l.s,"bad")}catch(e){st("locs","BROWSER BLOCKED","bad");line("Location: "+e.message)}}else st("locs","TOKEN未入力","wait")}
-function save(){localStorage.xk=q("key").value;localStorage.xcv=q("cv").value;localStorage.xlt=q("lt").value;line("このブラウザに保存しました")}
-function clearx(){localStorage.removeItem("xk");localStorage.removeItem("xcv");localStorage.removeItem("xlt");q("key").value=q("cv").value=q("lt").value=""}
-function gomap(){if(coords)window.open("https://www.google.com/maps?q="+coords[0]+","+coords[1],"_blank")}
-function dl(){let b=new Blob([q("log").textContent],{type:"text/plain"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="xc90-api-log.txt";a.click()}
-q("key").value=localStorage.xk||"";q("cv").value=localStorage.xcv||"";q("lt").value=localStorage.xlt||"";
-</script></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TRACE//VEHICLE — XC90</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --paper:#F2F3EE; --panel:#FBFBF8; --ink:#1C2226; --sub:#5E666B; --line:#C9CDC4; --soft:#E4E7E0;
+  --teal:#0E7470; --gold:#9A6A08; --rose:#B8324E; --plum:#5B3C74;
+  --sans:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+body{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+a{color:var(--teal)}
+.mono{font-family:var(--mono)}
+.wrap{max-width:1240px;margin:0 auto;padding:0 20px 60px}
+
+header{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;padding:28px 0 18px;border-bottom:2px solid var(--ink)}
+.brand{font-family:var(--mono);font-weight:500;font-size:30px;letter-spacing:-.5px;line-height:1}
+.brand span{color:var(--teal)}
+.brand-sub{color:var(--sub);font-size:13px;margin-top:6px}
+.hctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--ink);border-radius:4px;overflow:hidden}
+.seg button{border:0;border-radius:0;margin:0;background:transparent;color:var(--ink);padding:8px 14px;font-weight:500}
+.seg button.on{background:var(--ink);color:var(--panel)}
+.seg button.on.demo{background:var(--plum)}
+.demo-bar{display:none;margin-top:14px;border:1px solid var(--plum);border-left:6px solid var(--plum);padding:10px 14px;color:var(--plum);background:var(--panel)}
+body.is-demo .demo-bar{display:block}
+
+label{display:block;font-size:12px;color:var(--sub);margin:12px 0 4px}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:9px 10px}
+textarea{min-height:72px;font-family:var(--mono);font-size:12px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
+button{font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--panel);border-radius:4px;padding:8px 14px;margin:10px 6px 0 0}
+button.line{background:transparent;color:var(--ink)}
+button.warn{border-color:var(--rose);background:transparent;color:var(--rose)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+
+.grid{display:grid;grid-template-columns:360px 1fr;gap:28px;margin-top:26px}
+.col{min-width:0}
+section{border-top:1px solid var(--ink);padding:14px 0 22px}
+section>h2{font-size:17px;margin:0 0 4px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+section>h2 small{font-weight:400;font-size:12px;color:var(--sub)}
+.note{font-size:12px;color:var(--sub);margin:6px 0 0}
+
+.gate{margin-top:12px;border:1px solid var(--line);padding:12px 14px;background:var(--panel);border-left:6px solid var(--gold)}
+.gate.ok{border-left-color:var(--teal)}
+.gate.ng{border-left-color:var(--rose)}
+.gate b{display:block;font-size:14px}
+
+.last{display:grid;grid-template-columns:1fr auto;gap:10px 20px;align-items:end;border:1px solid var(--ink);background:var(--panel);padding:16px 18px}
+.last .coord{font-family:var(--mono);font-size:30px;letter-spacing:-1px;line-height:1.1}
+.last .meta{font-size:13px;color:var(--sub)}
+.last .empty{font-size:15px;color:var(--sub)}
+#map{height:380px;border:1px solid var(--ink);border-top:0;background:var(--soft)}
+.leaflet-container{font-family:var(--sans)}
+
+.st{font-family:var(--mono);font-size:12px;font-weight:500;padding:2px 7px;border:1px solid currentColor;border-radius:3px;white-space:nowrap}
+.st.ok{color:var(--teal)} .st.wait{color:var(--gold)} .st.ng{color:var(--rose)} .st.info{color:var(--plum)} .st.mute{color:var(--sub)}
+
+.tbl{width:100%;overflow-x:auto;border:1px solid var(--line);background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--soft);vertical-align:top}
+th{font-weight:500;color:var(--sub);font-size:12px;background:var(--paper);white-space:nowrap}
+tr.pick td{background:#E3F0EE}
+tbody tr[data-obs]{cursor:pointer}
+td.mono{font-size:12px;white-space:nowrap}
+#conTbl td:last-child{white-space:nowrap}
+.hash{font-family:var(--mono);font-size:11px;color:var(--sub);word-break:break-all}
+
+.diag{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--line);background:var(--panel)}
+.diag div{padding:10px 12px;border-right:1px solid var(--soft)}
+.diag div:last-child{border-right:0}
+.diag span{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
+.log{border:1px solid var(--line);background:var(--panel);font-family:var(--mono);font-size:12px;white-space:pre-wrap;max-height:260px;overflow:auto;padding:12px;margin-top:12px}
+.wide{margin-top:8px}
+.cols3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:28px}
+footer{border-top:2px solid var(--ink);margin-top:30px;padding-top:14px;font-size:12px;color:var(--sub)}
+
+@media (max-width:980px){.grid{grid-template-columns:1fr}.cols3{grid-template-columns:1fr}.diag{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.two{grid-template-columns:1fr}.last{grid-template-columns:1fr}.last .coord{font-size:22px}#map{height:300px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <div class="brand">TRACE<span>//</span>VEHICLE</div>
+    <div class="brand-sub">正規経路の位置情報を案件単位で統合・記録する確認画面</div>
+  </div>
+  <div class="hctl">
+    <div class="seg" role="group" aria-label="データ区分">
+      <button id="mProd" onclick="setMode('prod')">本番データ</button>
+      <button id="mDemo" class="demo" onclick="setMode('demo')">デモデータ</button>
+    </div>
+    <select id="caseSel" style="width:auto;min-width:220px" onchange="pickCase(this.value)" aria-label="案件の選択"></select>
+  </div>
+</header>
+<div class="demo-bar">デモデータを表示中。本番データとは別の保存領域で、出力にも「DEMO」の透かしが入ります。</div>
+
+<div class="grid">
+  <div class="col">
+    <section>
+      <h2>案件</h2>
+      <label for="cName">案件名</label><input id="cName">
+      <div class="two">
+        <div><label for="cClient">依頼者区分</label>
+          <select id="cClient"><option>所有者本人</option><option>法律事務所</option><option>調査業者</option><option>その他</option></select></div>
+        <div><label for="cOwner">担当者</label><input id="cOwner"></div>
+      </div>
+      <button onclick="saveCase()">案件を保存</button><button class="line" onclick="newCase()">新規案件</button>
+    </section>
+
+    <section>
+      <h2>法的根拠 <small>外部取得の前提条件</small></h2>
+      <label for="lType">根拠の種別</label>
+      <select id="lType">
+        <option>所有者本人（自己所有車両）</option>
+        <option>所有者・使用者の同意</option>
+        <option>契約GPS（設置・利用契約あり）</option>
+        <option>弁護士会照会（弁護士法23条の2）への回答</option>
+        <option>裁判所の手続</option>
+        <option>適法な現場調査</option>
+      </select>
+      <div class="two">
+        <div><label for="lRef">書類・照会番号</label><input id="lRef"></div>
+        <div><label for="lBy">承認者</label><input id="lBy"></div>
+      </div>
+      <button onclick="setLegal('APPROVED')">承認する</button><button class="line" onclick="setLegal('PENDING')">保留に戻す</button><button class="warn" onclick="setLegal('REJECTED')">却下</button>
+      <div id="gate" class="gate"></div>
+      <p class="note">照会を出したこと自体は位置の取得ではない。回答に位置情報が含まれる場合のみ観測として取り込む。調査業者単独に弁護士会照会の権限はない。</p>
+    </section>
+
+    <section>
+      <h2>車両</h2>
+      <label for="vName">車名</label><input id="vName">
+      <label for="vVin">VIN</label><input id="vVin" class="mono" maxlength="17">
+      <div class="two">
+        <div><label for="vPlate">登録番号</label><input id="vPlate"></div>
+        <div><label for="vProv">位置情報の提供元</label>
+          <select id="vProv"><option value="volvo">Volvo Cars API</option><option value="gps">契約GPS端末</option><option value="none">提供元なし</option></select></div>
+      </div>
+      <button onclick="saveVehicle()">車両を保存</button>
+      <p class="note">VIN・登録番号だけでは位置は取得できない。提供元との契約・所有者認証がある経路のみ使用する。</p>
+    </section>
+  </div>
+
+  <div class="col">
+    <section>
+      <h2>最終確認位置 <small id="lastAge"></small></h2>
+      <div class="last" id="last"></div>
+      <div id="map" role="region" aria-label="観測位置の地図"></div>
+      <p class="note">推定値（Wi-Fi/Cell）は最終確認位置に含めない。地図の円は報告精度（m）。</p>
+    </section>
+
+    <section>
+      <h2>取得経路</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>経路</th><th>状態</th><th>必要条件</th><th>操作</th></tr></thead>
+        <tbody id="conTbl"></tbody>
+      </table></div>
+    </section>
+  </div>
+</div>
+
+<section>
+  <h2>Volvo Connected Vehicle / Location API <small>所有者の Volvo ID に紐付いた車両のみ</small></h2>
+  <div class="diag">
+    <div><span>中継</span><b id="dRelay" class="st mute">未確認</b></div>
+    <div><span>トークン</span><b id="dTok" class="st mute">未確認</b></div>
+    <div><span>車両の紐付け</span><b id="dRel" class="st mute">未確認</b></div>
+    <div><span>VIN 照合</span><b id="dVin" class="st mute">未確認</b></div>
+    <div><span>位置情報</span><b id="dLoc" class="st mute">未確認</b></div>
+  </div>
+  <div class="cols3 wide">
+    <div>
+      <label for="relay">中継 URL（Cloudflare Worker）</label>
+      <input id="relay" class="mono" placeholder="https://xc90-relay.xxxx.workers.dev">
+      <label for="vk">VCC API KEY</label><input id="vk" type="password" autocomplete="off">
+    </div>
+    <div><label for="cvt">Connected Vehicle トークン</label><textarea id="cvt" autocomplete="off"></textarea></div>
+    <div><label for="lct">Location トークン</label><textarea id="lct" autocomplete="off"></textarea></div>
+  </div>
+  <button id="vRun" onclick="volvoRun()">診断して位置を取得</button>
+  <button class="line" onclick="saveCreds()">このタブの間だけ保持</button>
+  <button class="line" onclick="clearCreds()">認証情報を消去</button>
+  <p class="note">認証情報はページに埋め込まず、ブラウザを閉じると消える領域にのみ保持。中継 URL だけはこの端末に保存。</p>
+  <div class="log" id="log">待機中</div>
+</section>
+
+<div class="cols3">
+  <section>
+    <h2>現場観測の登録</h2>
+    <div class="two">
+      <div><label for="fLat">緯度</label><input id="fLat" class="mono" inputmode="decimal"></div>
+      <div><label for="fLon">経度</label><input id="fLon" class="mono" inputmode="decimal"></div>
+    </div>
+    <div class="two">
+      <div><label for="fAcc">精度（m）</label><input id="fAcc" class="mono" inputmode="numeric"></div>
+      <div><label for="fAt">観測日時</label><input id="fAt" type="datetime-local"></div>
+    </div>
+    <label for="fNote">観測メモ</label><input id="fNote">
+    <button class="line" onclick="useHere()">この端末の現在地を入れる</button><button onclick="addField()">観測を登録</button>
+  </section>
+
+  <section>
+    <h2>データ取込</h2>
+    <label for="iType">取込データの種別</label>
+    <select id="iType">
+      <option value="GPS">契約GPS端末のログ</option>
+      <option value="LEGAL RESPONSE">法的照会への回答（位置情報あり）</option>
+      <option value="TELEMATICS">テレマティクスの出力</option>
+      <option value="ESTIMATED">Wi-Fi/Cell 観測推定</option>
+    </select>
+    <label for="iProv">情報源（事業者名など）</label><input id="iProv">
+    <label for="iFile">CSV / JSON / GeoJSON</label><input id="iFile" type="file" accept=".csv,.json,.geojson,text/csv,application/json">
+    <button onclick="importFile()">取り込む</button>
+    <p class="note">CSV の列：observed_at, lat, lon, accuracy_m（任意）, note（任意）。原本はハッシュ付きで証拠に保存。</p>
+  </section>
+
+  <section>
+    <h2>原本の保存</h2>
+    <label for="eFile">照会回答書・契約書・写真など</label><input id="eFile" type="file">
+    <label for="eNote">内容の説明</label><input id="eNote">
+    <button onclick="addEvidence()">証拠として保存</button>
+    <p class="note">位置情報を含まない書類はここに保存。SHA-256 を記録し、1MB 以下は原本も保持。</p>
+  </section>
+</div>
+
+<section>
+  <h2>タイムライン <small id="obsCount"></small></h2>
+  <div class="tbl"><table>
+    <thead><tr><th>観測日時</th><th>経路</th><th>情報源</th><th>緯度, 経度</th><th>精度</th><th>信頼度</th><th>法的根拠</th><th>SHA-256</th></tr></thead>
+    <tbody id="obsTbl"></tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>証拠 <small id="evCount"></small></h2>
+  <div class="tbl"><table>
+    <thead><tr><th>登録日時</th><th>種別</th><th>ファイル・内容</th><th>サイズ</th><th>SHA-256</th><th></th></tr></thead>
+    <tbody id="evTbl"></tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>監査ログ <small id="auCount"></small></h2>
+  <button class="line" onclick="verifyAudit()">改ざん検証</button> <span id="auVerify" class="st mute">未検証</span>
+  <div class="tbl wide" style="max-height:340px;overflow:auto"><table>
+    <thead><tr><th>#</th><th>日時</th><th>操作</th><th>内容</th><th>ハッシュ</th></tr></thead>
+    <tbody id="auTbl"></tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>出力</h2>
+  <button onclick="exportJSON()">案件データを JSON で出力</button>
+  <button class="line" onclick="exportCSV()">観測を CSV で出力</button>
+  <button class="warn" onclick="resetMode()">この区分のデータを消去</button>
+  <p class="note">出力には案件名・出力者・日時・データ区分の透かしと、出力内容全体の SHA-256 が入る。</p>
+</section>
+
+<footer>
+  TRACE//VEHICLE 静的版（GitHub Pages）。データはこの端末のブラウザ内に保存。ログイン・権限管理・PostGIS 保存・GPS Webhook 受信は <span class="mono">server/</span> の構成で稼働。
+</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+const XC90_VIN = "YV1LFH6M4R1154216";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+const nowISO = () => new Date().toISOString();
+const fmt = iso => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d) ? String(iso) : d.toLocaleString("ja-JP", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"}); };
+const short = h => h ? h.slice(0, 12) + "…" : "—";
+
+/* ---------- storage ---------- */
+function safeGet(st, k){ try { return st.getItem(k); } catch { return null; } }
+function safeSet(st, k, v){ try { st.setItem(k, v); return true; } catch { return false; } }
+function safeDel(st, k){ try { st.removeItem(k); } catch {} }
+let mode = safeGet(localStorage, "tv:mode") === "demo" ? "demo" : "prod";
+let S = null;
+const blank = () => ({ cases:[], vehicles:[], legal:[], obs:[], evidence:[], audit:[], cur:null });
+function load(){
+  try { S = JSON.parse(safeGet(localStorage, "tv:" + mode + ":state")) || blank(); } catch { S = blank(); }
+}
+function persist(){
+  if (!safeSet(localStorage, "tv:" + mode + ":state", JSON.stringify(S))) alert("端末の保存容量が不足しています。証拠の原本サイズを確認してください。");
+}
+async function sha256(input){
+  const buf = typeof input === "string" ? new TextEncoder().encode(input) : input;
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* ---------- audit (hash chain) ---------- */
+let auditQ = Promise.resolve();
+function audit(action, detail){
+  auditQ = auditQ.then(async () => {
+    const prev = S.audit.length ? S.audit[S.audit.length - 1].hash : "GENESIS";
+    const core = { seq:S.audit.length + 1, ts:nowISO(), mode, case_id:S.cur, action, detail };
+    const hash = await sha256(prev + JSON.stringify(core));
+    S.audit.push({ ...core, prev, hash });
+    persist(); renderAudit();
+  });
+  return auditQ;
+}
+async function verifyAudit(){
+  await auditQ;
+  let prev = "GENESIS", ok = true, at = 0;
+  for (const e of S.audit){
+    const core = { seq:e.seq, ts:e.ts, mode:e.mode, case_id:e.case_id, action:e.action, detail:e.detail };
+    if (e.prev !== prev || await sha256(prev + JSON.stringify(core)) !== e.hash){ ok = false; at = e.seq; break; }
+    prev = e.hash;
+  }
+  setSt("auVerify", ok ? "整合 " + S.audit.length + "件" : "不整合 #" + at, ok ? "ok" : "ng");
+  audit("AUDIT_VERIFY", ok ? "OK" : "NG at #" + at);
+}
+
+/* ---------- current objects ---------- */
+const curCase = () => S.cases.find(c => c.id === S.cur) || null;
+const curVehicle = () => S.vehicles.find(v => v.case_id === S.cur) || null;
+const curLegal = () => S.legal.find(l => l.case_id === S.cur) || null;
+const caseObs = () => S.obs.filter(o => o.case_id === S.cur).sort((a, b) => new Date(a.observed_at) - new Date(b.observed_at));
+const approved = () => curLegal()?.status === "APPROVED";
+
+function requireGate(what){
+  if (!S.cur){ alert("先に案件を保存してください。"); return false; }
+  if (!approved()){
+    alert("法的根拠が承認されていないため、" + what + "は実行できません。法的根拠の欄で承認してください。");
+    audit("GATE_BLOCKED", what);
+    return false;
+  }
+  return true;
+}
+
+/* ---------- seeding ---------- */
+async function seed(){
+  if (S.cases.length) return;
+  if (mode === "prod"){
+    const id = uid();
+    S.cases.push({ id, name:"XC90 所有車両", client:"所有者本人", owner:"", created_at:nowISO() });
+    S.vehicles.push({ id:uid(), case_id:id, name:"Volvo XC90", vin:XC90_VIN, plate:"", provider:"volvo" });
+    S.legal.push({ id:uid(), case_id:id, type:"所有者本人（自己所有車両）", ref:"", by:"", status:"PENDING", updated_at:nowISO() });
+    S.cur = id; persist();
+    await audit("CASE_CREATE", "XC90 所有車両（初期登録）");
+  } else {
+    const id = uid();
+    S.cases.push({ id, name:"デモ案件", client:"法律事務所", owner:"デモ担当", created_at:nowISO() });
+    S.vehicles.push({ id:uid(), case_id:id, name:"デモ車両", vin:"DEMO0000000000000", plate:"デモ 000 あ 00-00", provider:"gps" });
+    S.legal.push({ id:uid(), case_id:id, type:"契約GPS（設置・利用契約あり）", ref:"DEMO-001", by:"デモ", status:"APPROVED", updated_at:nowISO() });
+    S.cur = id;
+    const base = Date.now() - 5 * 3600e3;
+    const pts = [[35.6812,139.7671,"GPS",15],[35.6896,139.7006,"GPS",12],[35.6580,139.7016,"FIELD OBSERVATION",30],[35.6628,139.7314,"ESTIMATED",350],[35.6717,139.7650,"GPS",10]];
+    for (let i = 0; i < pts.length; i++){
+      const [lat, lon, t, acc] = pts[i];
+      await addObs({ source_type:t, source_provider:"DEMO", observed_at:new Date(base + i * 3600e3).toISOString(), lat, lon, accuracy_m:acc, confidence:t === "ESTIMATED" ? 0.4 : 1, raw:{ demo:true } }, true);
+    }
+    persist();
+    await audit("CASE_CREATE", "デモ案件（デモデータ）");
+  }
+}
+
+/* ---------- mode / case ---------- */
+async function setMode(m){
+  await auditQ;
+  mode = m; safeSet(localStorage, "tv:mode", m);
+  load(); await seed(); renderAll();
+}
+function pickCase(id){ S.cur = id; persist(); renderAll(); audit("CASE_OPEN", curCase()?.name || id); }
+function newCase(){
+  const id = uid();
+  S.cases.push({ id, name:"新規案件", client:"所有者本人", owner:"", created_at:nowISO() });
+  S.legal.push({ id:uid(), case_id:id, type:"所有者本人（自己所有車両）", ref:"", by:"", status:"PENDING", updated_at:nowISO() });
+  S.cur = id; persist(); renderAll(); audit("CASE_CREATE", "新規案件");
+}
+function saveCase(){
+  const c = curCase(); if (!c) return newCase();
+  c.name = $("cName").value.trim() || "無題の案件"; c.client = $("cClient").value; c.owner = $("cOwner").value.trim();
+  persist(); renderAll(); audit("CASE_UPDATE", c.name + " / " + c.client);
+}
+function setLegal(status){
+  if (!S.cur) return;
+  let l = curLegal();
+  if (!l){ l = { id:uid(), case_id:S.cur }; S.legal.push(l); }
+  const type = $("lType").value, ref = $("lRef").value.trim(), by = $("lBy").value.trim();
+  if (status === "APPROVED" && !by){ alert("承認者を入力してください。"); return; }
+  Object.assign(l, { type, ref, by, status, updated_at:nowISO() });
+  persist(); renderAll(); audit("LEGAL_" + status, type + (ref ? " / " + ref : "") + (by ? " / 承認者 " + by : ""));
+}
+function saveVehicle(){
+  if (!S.cur) return;
+  let v = curVehicle();
+  const vin = $("vVin").value.trim().toUpperCase();
+  if (vin && mode === "prod" && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)){ alert("VIN は英数字17桁（I・O・Q を除く）で入力してください。"); return; }
+  if (!v){ v = { id:uid(), case_id:S.cur }; S.vehicles.push(v); }
+  Object.assign(v, { name:$("vName").value.trim(), vin, plate:$("vPlate").value.trim(), provider:$("vProv").value });
+  persist(); renderAll(); audit("VEHICLE_UPDATE", (v.name || "車両") + " / " + (vin || "VINなし"));
+}
+
+/* ---------- observations & evidence ---------- */
+async function addObs(o, silent){
+  const lat = Number(o.lat), lon = Number(o.lon);
+  if (o.lat === "" || o.lon === "" || o.lat == null || o.lon == null || !isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error("緯度経度が不正です");
+  const at = new Date(o.observed_at || Date.now());
+  if (isNaN(at)) throw new Error("観測日時が不正です");
+  const rec = {
+    id:uid(), case_id:S.cur, vehicle_id:curVehicle()?.id || null,
+    source_type:o.source_type, source_provider:o.source_provider || "",
+    observed_at:at.toISOString(),
+    lat, lon, accuracy_m:(o.accuracy_m === "" || o.accuracy_m == null || !isFinite(Number(o.accuracy_m))) ? null : Number(o.accuracy_m),
+    confidence:o.confidence ?? 1, legal_basis_id:curLegal()?.id || null,
+    evidence_id:o.evidence_id || null, note:o.note || "", raw:o.raw ?? null, received_at:nowISO()
+  };
+  rec.sha256 = await sha256(JSON.stringify(rec));
+  S.obs.push(rec);
+  if (!silent){ persist(); await audit("OBS_ADD", rec.source_type + " " + lat.toFixed(5) + "," + lon.toFixed(5) + " sha " + short(rec.sha256)); }
+  return rec;
+}
+async function storeEvidence(kind, name, mime, bytes, note){
+  const hash = await sha256(bytes);
+  const ev = { id:uid(), case_id:S.cur, kind, name, mime:mime || "", size:bytes.byteLength, sha256:hash, note:note || "", created_at:nowISO(), data:null };
+  if (bytes.byteLength <= 1024 * 1024){
+    let bin = ""; const u = new Uint8Array(bytes);
+    for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+    ev.data = btoa(bin);
+  }
+  S.evidence.push(ev); persist();
+  await audit("EVIDENCE_ADD", kind + " / " + name + " sha " + short(hash));
+  return ev;
+}
+
+async function addField(){
+  if (!requireGate("現場観測の登録")) return;
+  try {
+    await addObs({ source_type:"FIELD OBSERVATION", source_provider:curCase()?.owner || "現場担当", lat:$("fLat").value.trim(), lon:$("fLon").value.trim(), accuracy_m:$("fAcc").value.trim(), observed_at:$("fAt").value ? new Date($("fAt").value).toISOString() : nowISO(), confidence:1, note:$("fNote").value.trim(), raw:{ entered:"manual" } });
+    ["fLat","fLon","fAcc","fNote","fAt"].forEach(k => $(k).value = "");
+    renderAll();
+  } catch (e){ alert(e.message); }
+}
+function useHere(){
+  if (!navigator.geolocation){ alert("この端末では位置情報を取得できません。"); return; }
+  navigator.geolocation.getCurrentPosition(p => {
+    $("fLat").value = p.coords.latitude.toFixed(6); $("fLon").value = p.coords.longitude.toFixed(6);
+    $("fAcc").value = Math.round(p.coords.accuracy);
+    const d = new Date(p.timestamp), off = d.getTimezoneOffset() * 60000;
+    $("fAt").value = new Date(d - off).toISOString().slice(0, 16);
+  }, e => alert("現在地を取得できませんでした（" + e.message + "）"), { enableHighAccuracy:true, timeout:15000 });
+}
+
+function parseCSV(text){
+  text = text.replace(/^\uFEFF/, "");
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if (q){ if (ch === '"'){ if (text[i+1] === '"'){ cell += '"'; i++; } else q = false; } else cell += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ","){ row.push(cell); cell = ""; }
+    else if (ch === "\n" || ch === "\r"){ if (ch === "\r" && text[i+1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+    else cell += ch;
+  }
+  if (cell !== "" || row.length){ row.push(cell); rows.push(row); }
+  const clean = rows.filter(r => r.some(c => c.trim() !== "") && !r[0].trim().startsWith("#"));
+  if (!clean.length) return [];
+  const head = clean[0].map(h => h.trim().toLowerCase());
+  return clean.slice(1).map(r => {
+    const o = Object.fromEntries(head.map((h, i) => [h, (r[i] ?? "").trim()]));
+    return { lat:o.lat ?? o.latitude, lon:o.lon ?? o.lng ?? o.longitude, observed_at:o.observed_at || o.timestamp || o.time, accuracy_m:o.accuracy_m ?? o.accuracy, note:o.note };
+  });
+}
+function fromJSON(x){
+  if (x && x.type === "FeatureCollection") x = x.features;
+  else if (x && x.type === "Feature") x = [x];
+  else if (!Array.isArray(x)) x = x && Array.isArray(x.data) ? x.data : [x];
+  return x.map(f => {
+    if (f && f.geometry && Array.isArray(f.geometry.coordinates)){
+      const p = f.properties || {};
+      return { lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], observed_at:p.observed_at || p.timestamp || p.time, accuracy_m:p.accuracy_m ?? p.accuracy, note:p.note };
+    }
+    return { lat:f.lat ?? f.latitude, lon:f.lon ?? f.lng ?? f.longitude, observed_at:f.observed_at || f.timestamp || f.time, accuracy_m:f.accuracy_m ?? f.accuracy, note:f.note };
+  });
+}
+async function importFile(){
+  if (!requireGate("データ取込")) return;
+  const f = $("iFile").files[0]; if (!f){ alert("ファイルを選択してください。"); return; }
+  const type = $("iType").value, prov = $("iProv").value.trim();
+  if (!prov){ alert("情報源を入力してください。"); return; }
+  const bytes = await f.arrayBuffer(), text = new TextDecoder().decode(bytes);
+  let items;
+  try { items = /\.(json|geojson)$/i.test(f.name) || /^\s*[\[{]/.test(text) ? fromJSON(JSON.parse(text)) : parseCSV(text); }
+  catch (e){ alert("ファイルを読み取れませんでした：" + e.message); return; }
+  const ev = await storeEvidence(type === "LEGAL RESPONSE" ? "法的照会回答（原本）" : "取込ファイル（原本）", f.name, f.type, bytes, prov);
+  let ok = 0, ng = 0;
+  for (const it of items){
+    try {
+      if (!it.observed_at) throw new Error("observed_at なし");
+      await addObs({ source_type:type, source_provider:prov, lat:it.lat, lon:it.lon, observed_at:it.observed_at, accuracy_m:it.accuracy_m, confidence:type === "ESTIMATED" ? 0.5 : 1, note:it.note, evidence_id:ev.id, raw:it }, true);
+      ok++;
+    } catch { ng++; }
+  }
+  persist();
+  await audit("IMPORT", f.name + " / " + type + " / 取込 " + ok + "件・除外 " + ng + "件");
+  $("iFile").value = ""; renderAll();
+  alert("取込 " + ok + " 件" + (ng ? "、除外 " + ng + " 件（日時・緯度経度の欠落や不正）" : ""));
+}
+async function addEvidence(){
+  if (!S.cur){ alert("先に案件を保存してください。"); return; }
+  const f = $("eFile").files[0]; if (!f){ alert("ファイルを選択してください。"); return; }
+  await storeEvidence("書類・原本", f.name, f.type, await f.arrayBuffer(), $("eNote").value.trim());
+  $("eFile").value = ""; $("eNote").value = ""; renderAll();
+}
+function dlEvidence(id){
+  const ev = S.evidence.find(e => e.id === id); if (!ev || !ev.data) return;
+  const bin = atob(ev.data), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  download(new Blob([u], { type:ev.mime || "application/octet-stream" }), ev.name);
+  audit("EVIDENCE_DOWNLOAD", ev.name);
+}
+
+/* ---------- Volvo connector ---------- */
+const logs = [];
+function log(t){ logs.push("[" + new Date().toLocaleTimeString("ja-JP") + "] " + t); $("log").textContent = logs.join("\n"); $("log").scrollTop = 1e9; }
+function setSt(id, text, cls){ const el = $(id); el.textContent = text; el.className = "st " + cls; }
+function jwt(t){ try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); } catch { return null; } }
+const relayBase = () => $("relay").value.trim().replace(/\/+$/, "");
+
+async function vcall(path, token, key){
+  const base = relayBase() || "https://api.volvocars.com";
+  const r = await fetch(base + path, { headers:{ accept:"application/json", authorization:"Bearer " + token, "vcc-api-key":key } });
+  const txt = await r.text(); let d; try { d = JSON.parse(txt); } catch { d = txt; }
+  log(r.status + " GET " + path + "\n" + (typeof d === "string" ? d.slice(0, 2000) : JSON.stringify(d, null, 2).slice(0, 4000)));
+  return { s:r.status, d };
+}
+
+async function volvoRun(){
+  if (!requireGate("Volvo API からの取得")) return;
+  const v = curVehicle();
+  const vin = (v?.vin || "").toUpperCase();
+  if (!v || !vin || v.provider !== "volvo"){ alert("車両の提供元が Volvo Cars API で、VIN が登録されている必要があります。"); return; }
+  const key = $("vk").value.trim(), cv = $("cvt").value.trim(), lt = $("lct").value.trim();
+  ["dRelay","dTok","dRel","dVin","dLoc"].forEach(k => setSt(k, "確認中", "mute"));
+  logs.length = 0; log("診断開始 VIN " + vin);
+  if (!key || !cv){ setSt("dTok", "未入力", "ng"); log("VCC API KEY と Connected Vehicle トークンが必要です"); return; }
+  $("vRun").disabled = true;
+  await audit("CONNECTOR_RUN", "Volvo / VIN " + vin);
+  try {
+    if (relayBase()){
+      try { const h = await fetch(relayBase() + "/health"); setSt("dRelay", h.ok ? "応答あり" : "HTTP " + h.status, h.ok ? "ok" : "ng"); }
+      catch { setSt("dRelay", "到達不可", "ng"); }
+    } else setSt("dRelay", "未設定", "wait");
+
+    const p = jwt(cv);
+    if (!p) setSt("dTok", "JWT以外", "wait");
+    else if (p.exp && p.exp * 1000 < Date.now()){ setSt("dTok", "期限切れ", "ng"); log("トークンの有効期限切れ：" + fmt(new Date(p.exp * 1000).toISOString())); }
+    else setSt("dTok", p.exp ? "有効 " + new Date(p.exp * 1000).toLocaleTimeString("ja-JP") + "まで" : "有効", "ok");
+
+    let linked = false;
+    try {
+      const r = await vcall("/connected-vehicle/v2/vehicles", cv, key);
+      if (r.s === 200){
+        const list = r.d?.data || [];
+        if (!list.length){ setSt("dRel", "紐付けなし", "ng"); setSt("dVin", "対象外", "ng"); log("Volvo ID に紐付いた車両が0台。Volvo Cars アプリで車両を追加してから再実行。"); }
+        else {
+          setSt("dRel", list.length + "台", "ok");
+          linked = JSON.stringify(list).toUpperCase().includes(vin);
+          setSt("dVin", linked ? "一致" : "不一致", linked ? "ok" : "ng");
+          if (!linked) log("登録VINと一致する車両がこの Volvo ID にありません。位置取得は行いません。");
+        }
+      } else if (r.s === 401) setSt("dRel", "認証失敗", "ng");
+      else if (r.s === 403) setSt("dRel", "権限なし", "ng");
+      else setSt("dRel", "HTTP " + r.s, "ng");
+    } catch (e){
+      setSt("dRel", "通信遮断", "ng"); setSt("dVin", "未確認", "mute");
+      log("ブラウザからの通信が遮断されました（" + e.message + "）。" + (relayBase() ? "中継 URL と ALLOWED_ORIGINS を確認してください。" : "中継 URL を設定してください。"));
+    }
+
+    if (!linked){ setSt("dLoc", "取得不可", "ng"); await audit("CONNECTOR_RESULT", "Volvo / 取得不可（車両未紐付け・VIN不一致・通信不可）"); return; }
+    if (!lt){ setSt("dLoc", "トークン未入力", "wait"); await audit("CONNECTOR_RESULT", "Volvo / 位置トークン未入力"); return; }
+
+    try {
+      const r = await vcall("/location/v1/vehicles/" + vin + "/location", lt, key);
+      if (r.s === 200){
+        const f = r.d?.data || r.d;
+        const c = f?.geometry?.coordinates;
+        if (Array.isArray(c) && c.length >= 2){
+          const ev = await storeEvidence("API応答（原本）", "volvo-location-" + Date.now() + ".json", "application/json", new TextEncoder().encode(JSON.stringify(r.d)).buffer, "Volvo Location API");
+          const o = await addObs({ source_type:"TELEMATICS", source_provider:"Volvo Cars Location API", lat:c[1], lon:c[0], observed_at:f?.properties?.timestamp || nowISO(), accuracy_m:null, confidence:1, evidence_id:ev.id, raw:r.d });
+          setSt("dLoc", "取得", "ok"); log("位置を登録：" + o.lat.toFixed(6) + ", " + o.lon.toFixed(6) + "（" + fmt(o.observed_at) + "）");
+          await audit("CONNECTOR_RESULT", "Volvo / 位置取得");
+          renderAll(); focusObs(o.id);
+        } else { setSt("dLoc", "座標なし", "wait"); await audit("CONNECTOR_RESULT", "Volvo / 応答に座標なし"); }
+      } else {
+        setSt("dLoc", r.s === 403 ? "権限なし" : "HTTP " + r.s, "ng");
+        await audit("CONNECTOR_RESULT", "Volvo / Location HTTP " + r.s);
+      }
+    } catch (e){ setSt("dLoc", "通信遮断", "ng"); log("Location: " + e.message); }
+  } finally { $("vRun").disabled = false; renderConnectors(); }
+}
+function saveCreds(){
+  safeSet(sessionStorage, "tv:vk", $("vk").value); safeSet(sessionStorage, "tv:cv", $("cvt").value); safeSet(sessionStorage, "tv:lt", $("lct").value);
+  safeSet(localStorage, "tv:relay", $("relay").value.trim());
+  log("認証情報をこのタブに保持（タブを閉じると消去）");
+}
+function clearCreds(){
+  ["tv:vk","tv:cv","tv:lt"].forEach(k => safeDel(sessionStorage, k));
+  $("vk").value = $("cvt").value = $("lct").value = "";
+  log("認証情報を消去"); renderConnectors();
+}
+
+/* ---------- map ---------- */
+let map = null, layer = null;
+const markers = {};
+const COLOR = { "TELEMATICS":"#0E7470", "GPS":"#0E7470", "FIELD OBSERVATION":"#5B3C74", "LEGAL RESPONSE":"#9A6A08", "ESTIMATED":"#B8324E" };
+function initMap(){
+  if (!window.L){ $("map").innerHTML = '<p class="note" style="padding:14px">地図ライブラリを読み込めませんでした。座標はタイムラインで確認できます。</p>'; return; }
+  map = L.map("map", { scrollWheelZoom:false }).setView([35.681, 139.767], 11);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"&copy; OpenStreetMap contributors" }).addTo(map);
+  layer = L.layerGroup().addTo(map);
+}
+function renderMap(){
+  if (!map) return;
+  layer.clearLayers(); for (const k in markers) delete markers[k];
+  const obs = caseObs(); if (!obs.length){ map.setView([35.681, 139.767], 11); return; }
+  const confirmed = obs.filter(o => o.source_type !== "ESTIMATED");
+  if (confirmed.length > 1) L.polyline(confirmed.map(o => [o.lat, o.lon]), { color:"#1C2226", weight:1.5, dashArray:"4 5", opacity:.6 }).addTo(layer);
+  const last = confirmed[confirmed.length - 1];
+  obs.forEach(o => {
+    const col = COLOR[o.source_type] || "#5E666B", isLast = last && o.id === last.id;
+    if (o.accuracy_m) L.circle([o.lat, o.lon], { radius:o.accuracy_m, color:col, weight:1, fillOpacity:.08 }).addTo(layer);
+    markers[o.id] = L.circleMarker([o.lat, o.lon], { radius:isLast ? 9 : 6, color:isLast ? "#1C2226" : col, weight:isLast ? 3 : 2, fillColor:col, fillOpacity:.85 })
+      .bindPopup("<b>" + esc(o.source_type) + "</b><br>" + esc(fmt(o.observed_at)) + "<br>" + esc(o.source_provider) + (o.accuracy_m ? "<br>精度 " + esc(o.accuracy_m) + " m" : ""))
+      .addTo(layer);
+  });
+  map.fitBounds(L.latLngBounds(obs.map(o => [o.lat, o.lon])).pad(0.25), { maxZoom:15 });
+}
+function focusObs(id){
+  document.querySelectorAll("#obsTbl tr").forEach(tr => tr.classList.toggle("pick", tr.dataset.obs === id));
+  const o = S.obs.find(x => x.id === id); if (!o || !map) return;
+  map.setView([o.lat, o.lon], Math.max(map.getZoom(), 15)); markers[id]?.openPopup();
+}
+
+/* ---------- render ---------- */
+function renderCases(){
+  $("caseSel").innerHTML = S.cases.map(c => '<option value="' + esc(c.id) + '"' + (c.id === S.cur ? " selected" : "") + ">" + esc(c.name) + "</option>").join("");
+  const c = curCase() || {};
+  $("cName").value = c.name || ""; $("cClient").value = c.client || "所有者本人"; $("cOwner").value = c.owner || "";
+  const l = curLegal() || {};
+  $("lType").value = l.type || "所有者本人（自己所有車両）"; $("lRef").value = l.ref || ""; $("lBy").value = l.by || "";
+  const g = $("gate"), st = l.status || "PENDING";
+  g.className = "gate " + (st === "APPROVED" ? "ok" : st === "REJECTED" ? "ng" : "");
+  g.innerHTML = "<b>" + (st === "APPROVED" ? "承認済み：外部取得・取込を実行できます" : st === "REJECTED" ? "却下：外部取得・取込はできません" : "未承認：外部取得・取込は停止中") + "</b>"
+    + '<span class="note">' + esc(l.type || "") + (l.by ? "／承認者 " + esc(l.by) : "") + (l.updated_at ? "／更新 " + esc(fmt(l.updated_at)) : "") + "</span>";
+  const v = curVehicle() || {};
+  $("vName").value = v.name || ""; $("vVin").value = v.vin || ""; $("vPlate").value = v.plate || ""; $("vProv").value = v.provider || "none";
+}
+function renderConnectors(){
+  const v = curVehicle(), ap = approved();
+  const hasLegalEv = S.evidence.some(e => e.case_id === S.cur && /法的照会/.test(e.kind));
+  const volvoState = !v || v.provider !== "volvo" ? ["対象外","mute"] : (ap && $("vk").value && $("cvt").value) ? ["AVAILABLE","ok"] : ["NEEDS AUTH","wait"];
+  const rows = [
+    ["メーカー / 正規テレマティクス（Volvo）", volvoState, "API 契約・Volvo ID と車両の紐付け・所有者認証", '<a href="#vRun">取得へ</a>'],
+    ["契約GPS端末", ap ? ["IMPORT","info"] : ["停止","mute"], "適法な設置・利用契約。リアルタイム受信は server/ の Webhook", '<a href="#iType">取込へ</a>'],
+    ["現場観測", ap ? ["FIELD OBSERVATION","info"] : ["停止","mute"], "適法な調査・観測端末の位置", '<a href="#fLat">登録へ</a>'],
+    ["法的照会への回答", hasLegalEv ? ["IMPORT","info"] : ["WAITING","wait"], "適法な手続と相手方の回答。回答に位置がある場合のみ", '<a href="#iType">取込へ</a>'],
+    ["Wi-Fi / Cell 観測推定", ap ? ["ESTIMATED","ng"] : ["停止","mute"], "観測端末が実際に取得した周辺無線の値", '<a href="#iType">取込へ</a>'],
+    ["識別子のみ（VIN・登録番号）", ["UNSUPPORTED","ng"], "識別子だけでは位置を取得しない", ""],
+  ];
+  $("conTbl").innerHTML = rows.map(r => "<tr><td>" + esc(r[0]) + '</td><td><span class="st ' + r[1][1] + '">' + esc(r[1][0]) + "</span></td><td>" + esc(r[2]) + "</td><td>" + r[3] + "</td></tr>").join("");
+}
+function renderLast(){
+  const obs = caseObs(), confirmed = obs.filter(o => o.source_type !== "ESTIMATED");
+  const last = confirmed[confirmed.length - 1];
+  const est = obs.filter(o => o.source_type === "ESTIMATED").pop();
+  if (!last){
+    const reason = !approved() ? "法的根拠が未承認のため、取得を停止しています。" : "確認済みの位置はまだありません。取得経路から取得・登録してください。";
+    $("last").innerHTML = '<div class="empty">' + esc(reason) + "</div>"; $("lastAge").textContent = ""; return;
+  }
+  const mins = Math.max(0, Math.round((Date.now() - new Date(last.observed_at)) / 60000));
+  $("lastAge").textContent = mins < 60 ? mins + "分前" : mins < 1440 ? Math.round(mins / 60) + "時間前" : Math.round(mins / 1440) + "日前";
+  $("last").innerHTML =
+    '<div><div class="coord">' + last.lat.toFixed(6) + ", " + last.lon.toFixed(6) + '</div><div class="meta">' + esc(fmt(last.observed_at)) + "／" + esc(last.source_type) + "／" + esc(last.source_provider || "—") + "／精度 " + (last.accuracy_m ? esc(last.accuracy_m) + " m" : "未報告") + "</div>"
+    + (est && new Date(est.observed_at) > new Date(last.observed_at) ? '<div class="meta">これより新しい推定値あり（' + esc(fmt(est.observed_at)) + "、精度 " + esc(est.accuracy_m ?? "—") + " m）</div>" : "")
+    + '</div><div><a href="https://www.google.com/maps?q=' + last.lat + "," + last.lon + '" target="_blank" rel="noopener">Google マップで開く</a></div>';
+}
+function renderObs(){
+  const obs = caseObs().slice().reverse();
+  $("obsCount").textContent = obs.length + "件";
+  const lg = id => { const l = S.legal.find(x => x.id === id); return l ? l.type : "—"; };
+  const cls = t => t === "ESTIMATED" ? "ng" : t === "LEGAL RESPONSE" ? "wait" : t === "FIELD OBSERVATION" ? "info" : "ok";
+  $("obsTbl").innerHTML = obs.length ? obs.map(o =>
+    '<tr data-obs="' + esc(o.id) + '"><td class="mono">' + esc(fmt(o.observed_at)) + '</td><td><span class="st ' + cls(o.source_type) + '">' + esc(o.source_type) + "</span></td><td>" + esc(o.source_provider) + (o.note ? '<br><span class="note">' + esc(o.note) + "</span>" : "") + '</td><td class="mono">' + o.lat.toFixed(6) + ", " + o.lon.toFixed(6) + '</td><td class="mono">' + (o.accuracy_m != null ? esc(o.accuracy_m) + " m" : "—") + '</td><td class="mono">' + esc(o.confidence) + "</td><td>" + esc(lg(o.legal_basis_id)) + '</td><td class="hash" title="' + esc(o.sha256) + '">' + short(o.sha256) + "</td></tr>"
+  ).join("") : '<tr><td colspan="8" class="note">観測はまだありません。</td></tr>';
+  document.querySelectorAll("#obsTbl tr[data-obs]").forEach(tr => tr.onclick = () => focusObs(tr.dataset.obs));
+}
+function renderEvidence(){
+  const ev = S.evidence.filter(e => e.case_id === S.cur).slice().reverse();
+  $("evCount").textContent = ev.length + "件";
+  $("evTbl").innerHTML = ev.length ? ev.map(e =>
+    '<tr><td class="mono">' + esc(fmt(e.created_at)) + "</td><td>" + esc(e.kind) + "</td><td>" + esc(e.name) + (e.note ? '<br><span class="note">' + esc(e.note) + "</span>" : "") + '</td><td class="mono">' + (e.size / 1024).toFixed(1) + ' KB</td><td class="hash">' + esc(e.sha256) + "</td><td>" + (e.data ? '<button class="line" style="margin:0" data-ev="' + esc(e.id) + '">原本</button>' : '<span class="note">ハッシュのみ</span>') + "</td></tr>"
+  ).join("") : '<tr><td colspan="6" class="note">証拠はまだありません。</td></tr>';
+  document.querySelectorAll("#evTbl button[data-ev]").forEach(b => b.onclick = () => dlEvidence(b.dataset.ev));
+}
+function renderAudit(){
+  $("auCount").textContent = S.audit.length + "件";
+  $("auTbl").innerHTML = S.audit.slice().reverse().map(e => '<tr><td class="mono">' + e.seq + '</td><td class="mono">' + esc(fmt(e.ts)) + '</td><td class="mono">' + esc(e.action) + "</td><td>" + esc(e.detail) + '</td><td class="hash" title="' + esc(e.hash) + '">' + short(e.hash) + "</td></tr>").join("");
+}
+function renderAll(){
+  document.body.classList.toggle("is-demo", mode === "demo");
+  $("mProd").classList.toggle("on", mode === "prod"); $("mDemo").classList.toggle("on", mode === "demo");
+  renderCases(); renderConnectors(); renderLast(); renderObs(); renderEvidence(); renderAudit(); renderMap();
+}
+
+/* ---------- export ---------- */
+function download(blob, name){ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+function watermark(){
+  const c = curCase() || {};
+  return { system:"TRACE//VEHICLE (static)", data_class:mode === "demo" ? "DEMO — 証拠として使用不可" : "PRODUCTION", case:c.name, exported_by:c.owner || "未設定", exported_at:nowISO() };
+}
+async function exportJSON(){
+  if (!S.cur) return;
+  await auditQ;
+  const body = {
+    watermark:watermark(), case:curCase(), legal_basis:curLegal(), vehicle:curVehicle(),
+    observations:caseObs(),
+    evidence:S.evidence.filter(e => e.case_id === S.cur).map(({ data, ...m }) => m),
+    audit:S.audit.filter(e => !e.case_id || e.case_id === S.cur)
+  };
+  const text = JSON.stringify(body, null, 2), hash = await sha256(text);
+  download(new Blob([JSON.stringify({ bundle_sha256:hash, bundle:body }, null, 2)], { type:"application/json" }), "trace-" + (mode === "demo" ? "DEMO-" : "") + Date.now() + ".json");
+  audit("EXPORT_JSON", "bundle sha " + short(hash));
+}
+async function exportCSV(){
+  if (!S.cur) return;
+  const w = watermark(), q = s => '"' + String(s ?? "").replace(/"/g, '""') + '"';
+  const head = ["observed_at","source_type","source_provider","lat","lon","accuracy_m","confidence","legal_basis","sha256","note"];
+  const rows = caseObs().map(o => [o.observed_at, o.source_type, o.source_provider, o.lat, o.lon, o.accuracy_m ?? "", o.confidence, S.legal.find(l => l.id === o.legal_basis_id)?.type || "", o.sha256, o.note].map(q).join(","));
+  const body = [head.join(","), ...rows].join("\n"), hash = await sha256(body);
+  const meta = Object.entries(w).map(([k, v]) => "# " + k + ": " + v).join("\n") + "\n# body_sha256: " + hash + "\n";
+  download(new Blob(["\uFEFF" + meta + body], { type:"text/csv" }), "trace-obs-" + (mode === "demo" ? "DEMO-" : "") + Date.now() + ".csv");
+  audit("EXPORT_CSV", "body sha " + short(hash));
+}
+async function resetMode(){
+  const label = mode === "demo" ? "デモデータ" : "本番データ";
+  if (!confirm(label + "（案件・観測・証拠・監査ログ）をこの端末からすべて消去します。先に JSON 出力で保全してください。消去しますか？")) return;
+  if (mode === "prod" && prompt("確認のため「消去」と入力してください。") !== "消去") return;
+  await auditQ; safeDel(localStorage, "tv:" + mode + ":state"); load(); await seed(); renderAll();
+}
+
+/* ---------- boot ---------- */
+(async function boot(){
+  // 旧版がブラウザに残した認証情報を、タブ限定の保持領域へ移して削除
+  const legacy = { vk:safeGet(localStorage, "xk"), cv:safeGet(localStorage, "xcv"), lt:safeGet(localStorage, "xlt") };
+  if (legacy.vk || legacy.cv || legacy.lt){
+    if (legacy.vk) safeSet(sessionStorage, "tv:vk", legacy.vk);
+    if (legacy.cv) safeSet(sessionStorage, "tv:cv", legacy.cv);
+    if (legacy.lt) safeSet(sessionStorage, "tv:lt", legacy.lt);
+    ["xk","xcv","xlt"].forEach(k => safeDel(localStorage, k));
+  }
+  $("vk").value = safeGet(sessionStorage, "tv:vk") || "";
+  $("cvt").value = safeGet(sessionStorage, "tv:cv") || "";
+  $("lct").value = safeGet(sessionStorage, "tv:lt") || "";
+  $("relay").value = safeGet(localStorage, "tv:relay") || "";
+  ["vk","cvt"].forEach(k => $(k).addEventListener("input", renderConnectors));
+  $("relay").addEventListener("change", () => safeSet(localStorage, "tv:relay", $("relay").value.trim()));
+  initMap();
+  load(); await seed(); renderAll();
+})();
+</script>
+</body>
+</html>
